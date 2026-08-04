@@ -23,8 +23,9 @@ jobs:
 
   smoke:
     needs: build
-    # 16-core runners expose /dev/kvm (nested virt); default runners don't.
-    runs-on: ubuntu-latest-16-cores
+    # GitHub-hosted runners have no /dev/kvm (no nested virtualization), so
+    # this is a boot-only check unless the repo ever gets a KVM-capable runner.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
