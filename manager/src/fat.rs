@@ -25,13 +25,21 @@ fn short_name(s: &str) -> [u8; 11] {
     n
 }
 
-const NAME_BOOTX64: &[u8; 11] = b"BOOTX64.EFI";
+/// Build an 8.3 directory-entry name: NAME[8] + EXT[3], no dot.
+fn fat_83(name: &[u8; 8], ext: &[u8; 3]) -> [u8; 11] {
+    let mut n = [b' '; 11];
+    n[..8].copy_from_slice(name);
+    n[8..11].copy_from_slice(ext);
+    n
+}
 
 pub fn write_fat32_disk(efi: &[u8], path: &Path) -> Result<(), String> {
     let mut img = vec![0u8; TOTAL_SEC as usize * BS];
 
     write_boot_sector(&mut img[..BS]);
     write_fsinfo(&mut img[(1 * BS as u32) as usize..(2 * BS as u32) as usize]);
+    write_boot_sector(&mut img[6 * BS..7 * BS]); // backup boot sector
+    write_fsinfo(&mut img[7 * BS..8 * BS]); // backup FSInfo
     write_fat(&mut img, efi.len());
 
     write_dir(
@@ -58,7 +66,12 @@ pub fn write_fat32_disk(efi: &[u8], path: &Path) -> Result<(), String> {
         &[
             dir_entry(short_name("."), 0x10, BOOT_DIR_CLUS, 0),
             dir_entry(short_name(".."), 0x10, EFI_DIR_CLUS, 0),
-            dir_entry(*NAME_BOOTX64, 0x20, FILE_START_CLUS, efi.len() as u32),
+            dir_entry(
+                fat_83(b"BOOTX64 ", b"EFI"),
+                0x20,
+                FILE_START_CLUS,
+                efi.len() as u32,
+            ),
         ],
     );
     write_file_chain(&mut img, efi);
@@ -73,9 +86,9 @@ fn write_boot_sector(b: &mut [u8]) {
     b[1] = 0x3C;
     b[2] = 0x90;
     b[3..11].copy_from_slice(b"MOCHIVM ");
-    put16(b, 11, 512); // BytesPerSec
-    b[13] = 1; // SectorsPerClus
-    put16(b, 14, RSVD_SEC as u16);
+    put16(b, 11, 512); // BytsPerSec
+    b[13] = 1; // SecPerClus
+    put16(b, 14, RSVD_SEC as u16); // RsvdSecCnt
     b[16] = 2; // NumFATs
     put16(b, 17, 0); // RootEntCnt (0 for FAT32)
     put16(b, 19, 0); // TotSec16
@@ -87,15 +100,15 @@ fn write_boot_sector(b: &mut [u8]) {
     put32(b, 32, TOTAL_SEC); // TotSec32
     put32(b, 36, FAT_SEC); // FATSz32
     put16(b, 40, 0); // ExtFlags
-    put16(b, 41, 0); // FSVer
-    put32(b, 43, ROOT_CLUS); // RootClus
-    put16(b, 47, 1); // FSInfo
-    put16(b, 49, 6); // BkBootSec
-    b[63] = 0x80; // DrvNum
-    b[65] = 0x29; // BootSig
-    put32(b, 66, 0x1234_5678); // VolID
-    b[70..81].copy_from_slice(b"MOCHIVM    "); // VolLab
-    b[81..89].copy_from_slice(b"FAT32   "); // FilSysType
+    put16(b, 42, 0); // FSVer
+    put32(b, 44, ROOT_CLUS); // RootClus
+    put16(b, 48, 1); // FSInfo
+    put16(b, 50, 6); // BkBootSec
+    b[64] = 0x80; // DrvNum
+    b[66] = 0x29; // BootSig
+    put32(b, 67, 0x1234_5678); // VolID
+    b[71..82].copy_from_slice(b"MOCHIVM    "); // VolLab
+    b[82..90].copy_from_slice(b"FAT32   "); // FilSysType
     b[510] = 0x55;
     b[511] = 0xAA;
 }
@@ -196,11 +209,19 @@ mod tests {
             TOTAL_SEC
         );
         assert_eq!(
-            u32::from_le_bytes(img[43..47].try_into().unwrap()),
+            u32::from_le_bytes(img[44..48].try_into().unwrap()),
             ROOT_CLUS
         );
+        assert_eq!(u16::from_le_bytes([img[48], img[49]]), 1); // FSInfo
         assert_eq!(img[510], 0x55);
         assert_eq!(img[511], 0xAA);
+    }
+
+    #[test]
+    fn fat83_name_has_no_dot() {
+        assert_eq!(fat_83(b"BOOTX64 ", b"EFI"), *b"BOOTX64 EFI");
+        assert_eq!(&fat_83(b"BOOTX64 ", b"EFI")[..8], b"BOOTX64 ");
+        assert_eq!(&fat_83(b"BOOTX64 ", b"EFI")[8..], b"EFI");
     }
 
     #[test]
