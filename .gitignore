@@ -1,0 +1,4 @@
+/target
+/serial.log
+/disk.img
+/OVMF_VARS.fd

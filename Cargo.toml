@@ -1,0 +1,13 @@
+[package]
+name = "mochivm"
+version = "0.1.0"
+edition = "2021"
+description = "from-scratch type-2 hypervisor skeleton (vmx/vmcs, hello-world guest)"
+license = "MIT"
+
+[profile.release]
+panic = "abort"
+opt-level = 2
+
+[profile.dev]
+panic = "abort"
