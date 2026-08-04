@@ -2,3 +2,5 @@
 /serial.log
 /disk.img
 /OVMF_VARS.fd
+/runtime
+/manager/target

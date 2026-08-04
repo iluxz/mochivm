@@ -42,3 +42,30 @@ jobs:
         with:
           name: serial-log
           path: serial.log
+
+  manager:
+    # Build the mochivm-manager gui (qemu backend + serial console). The
+    # windows artifact is the one zum actually runs; linux keeps the build
+    # honest cross-platform.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: format check
+        run: cargo fmt --check
+        working-directory: manager
+      - name: test
+        run: cargo test --release
+        working-directory: manager
+      - name: build
+        run: cargo build --release
+        working-directory: manager
+      - name: upload windows exe
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochivm-manager-windows
+          path: manager/target/release/mochivm-manager.exe

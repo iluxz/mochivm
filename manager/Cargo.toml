@@ -1,0 +1,13 @@
+[package]
+name = "mochivm-manager"
+version = "0.1.0"
+edition = "2021"
+description = "mochivm gui launcher - boots the mochivm uefi hypervisor in a qemu backend and shows its serial console"
+license = "MIT"
+
+[dependencies]
+eframe = "0.31"
+rfd = "0.15"
+
+[profile.release]
+opt-level = 2
