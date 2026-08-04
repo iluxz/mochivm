@@ -6,7 +6,9 @@ use std::io::Write;
 use std::path::Path;
 
 const BS: usize = 512;
-const TOTAL_SEC: u32 = 65536;
+/// 34MB. Sized so data clusters (>= 65525, the FAT32 minimum that EDK2's
+/// FatDxe enforces) fit with 1-sector clusters. Cluster 2 = root dir.
+const TOTAL_SEC: u32 = 69632;
 const RSVD_SEC: u32 = 32;
 const NUM_FATS: u32 = 2;
 const FAT_SEC: u32 = 1024;
@@ -215,6 +217,9 @@ mod tests {
         assert_eq!(u16::from_le_bytes([img[48], img[49]]), 1); // FSInfo
         assert_eq!(img[510], 0x55);
         assert_eq!(img[511], 0xAA);
+        // EDK2 FatDxe rejects FAT32 volumes with fewer than 65525 clusters
+        let max_cluster = TOTAL_SEC - DATA_START;
+        assert!(max_cluster >= 65525, "max_cluster={max_cluster} < 65525");
     }
 
     #[test]
