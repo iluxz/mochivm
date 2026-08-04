@@ -11,6 +11,9 @@ use vm::{Accel, Backend, VmConfig};
 const LOG_CAP: usize = 250_000;
 
 fn main() -> eframe::Result<()> {
+    if std::env::args().any(|a| a == "--self-test") {
+        return run_self_test();
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1150.0, 720.0])
@@ -18,6 +21,116 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native("MochiVM", options, Box::new(|_cc| Ok(Box::new(App::new()))))
+}
+
+/// Headless end-to-end check: build the boot disk from the bundled mochivm.efi,
+/// boot it in the bundled engine, and confirm the hypervisor banner appears on
+/// serial. Exits 0 on success, 1 on failure.
+fn run_self_test() -> eframe::Result<()> {
+    use std::time::{Duration, Instant};
+
+    let mut report = String::new();
+    let mut say = |s: &str| {
+        report.push_str(s);
+        report.push('\n');
+    };
+
+    let dir = exe_dir();
+    let efi = dir.join("mochivm.efi");
+    let code = dir.join("ovmf/x64/code.fd");
+    let vars = dir.join("ovmf/x64/vars.fd");
+    let engine = dir.join("engine");
+
+    say("== mochivm self-test ==");
+    say(&format!("exe dir: {}", dir.display()));
+
+    for (what, p) in [
+        ("mochivm.efi", &efi),
+        ("ovmf code.fd", &code),
+        ("ovmf vars.fd", &vars),
+    ] {
+        let ok = p.exists();
+        say(&format!(
+            "  {}: {}",
+            what,
+            if ok { "ok" } else { "MISSING" }
+        ));
+        if !ok {
+            write_report(&dir, &report);
+            return Err(format!("missing {what}").into());
+        }
+    }
+    say(&format!(
+        "  engine: {}",
+        if engine.join("mochivm-vm.exe").exists() || engine.join("qemu-system-x86_64.exe").exists()
+        {
+            "ok"
+        } else {
+            "MISSING"
+        }
+    ));
+
+    let mut backend = Backend::new(dir.join("runtime"));
+    let cfg = VmConfig {
+        name: "selftest".into(),
+        accel: Accel::Tcg,
+        ..Default::default()
+    };
+    match backend.start(&cfg, &efi, &code, &vars) {
+        Ok(()) => say("  engine spawned (software emulation)"),
+        Err(e) => {
+            say(&format!("  engine spawn failed: {e}"));
+            write_report(&dir, &report);
+            return Err("selftest failed".into());
+        }
+    }
+
+    let mut log = String::new();
+    let deadline = Instant::now() + Duration::from_secs(25);
+    let mut passed = false;
+    while Instant::now() < deadline {
+        log.push_str(&backend.drain_log());
+        if log.contains("mochivm booted") {
+            passed = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    backend.stop();
+
+    for line in log.lines() {
+        if line.contains("[mochivm]") {
+            say(&format!("  {line}"));
+        }
+    }
+
+    if passed {
+        say("== SELF-TEST PASSED ==");
+    } else {
+        say("== SELF-TEST FAILED: 'mochivm booted' never appeared on serial ==");
+    }
+    write_report(&dir, &report);
+    if passed {
+        Ok(())
+    } else {
+        Err("selftest failed".into())
+    }
+}
+
+/// The release exe is a GUI-subsystem binary (no console), so the self-test
+/// writes its report to `selftest.log` next to the exe. Exit code still
+/// carries pass/fail for scripting.
+fn write_report(dir: &std::path::Path, report: &str) {
+    use std::io::Write;
+    let path = dir.join("selftest.log");
+    let _ = std::fs::File::create(&path).map(|mut f| f.write_all(report.as_bytes()));
+}
+
+fn exe_dir() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_default()
 }
 
 struct App {
@@ -34,10 +147,7 @@ struct App {
 
 impl App {
     fn new() -> Self {
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-            .unwrap_or_default();
+        let exe_dir = exe_dir();
         let (ovmf_code, ovmf_vars) = ovmf::detect().unwrap_or_else(|| {
             (
                 exe_dir.join("ovmf/x64/code.fd"),
