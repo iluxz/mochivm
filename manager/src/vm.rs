@@ -109,6 +109,8 @@ impl Backend {
             .arg("none")
             .arg("-display")
             .arg("none")
+            .arg("-vga")
+            .arg("none")
             .arg("-no-reboot")
             .arg("-no-shutdown")
             .stdout(Stdio::piped())

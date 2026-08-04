@@ -66,14 +66,23 @@ pub fn download() -> Result<(PathBuf, PathBuf), String> {
         return Err("tar extract failed".into());
     }
 
-    let code = target.join("x64/code.fd");
-    let vars = target.join("x64/vars.fd");
-    if !code.exists() || !vars.exists() {
-        return Err(format!(
-            "expected {} and {}",
-            code.display(),
-            vars.display()
-        ));
-    }
+    let code = find_file(&target, "code.fd").ok_or("code.fd not in archive")?;
+    let vars = find_file(&target, "vars.fd").ok_or("vars.fd not in archive")?;
     Ok((code, vars))
+}
+
+/// Recursively find a file by name under `root` (the ovmf-prebuilt archives
+/// nest the files under a versioned directory).
+fn find_file(root: &PathBuf, name: &str) -> Option<PathBuf> {
+    for entry in std::fs::read_dir(root).ok()? {
+        let path = entry.ok()?.path();
+        if path.is_dir() {
+            if let Some(found) = find_file(&path, name) {
+                return Some(found);
+            }
+        } else if path.file_name().and_then(|n| n.to_str()) == Some(name) {
+            return Some(path);
+        }
+    }
+    None
 }
