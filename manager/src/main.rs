@@ -12,7 +12,10 @@ const LOG_CAP: usize = 250_000;
 
 fn main() -> eframe::Result<()> {
     if std::env::args().any(|a| a == "--self-test") {
-        return run_self_test();
+        std::process::exit(match run_self_test() {
+            Ok(()) => 0,
+            Err(_) => 1,
+        });
     }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -26,7 +29,7 @@ fn main() -> eframe::Result<()> {
 /// Headless end-to-end check: build the boot disk from the bundled mochivm.efi,
 /// boot it in the bundled engine, and confirm the hypervisor banner appears on
 /// serial. Exits 0 on success, 1 on failure.
-fn run_self_test() -> eframe::Result<()> {
+fn run_self_test() -> Result<(), String> {
     use std::time::{Duration, Instant};
 
     let mut report = String::new();
@@ -57,7 +60,7 @@ fn run_self_test() -> eframe::Result<()> {
         ));
         if !ok {
             write_report(&dir, &report);
-            return Err(format!("missing {what}").into());
+            return Err(format!("missing {what}"));
         }
     }
     say(&format!(
@@ -81,7 +84,7 @@ fn run_self_test() -> eframe::Result<()> {
         Err(e) => {
             say(&format!("  engine spawn failed: {e}"));
             write_report(&dir, &report);
-            return Err("selftest failed".into());
+            return Err("selftest failed".to_string());
         }
     }
 
