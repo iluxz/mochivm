@@ -17,11 +17,7 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([900.0, 560.0]),
         ..Default::default()
     };
-    eframe::run_native(
-        "mochivm manager",
-        options,
-        Box::new(|_cc| Ok(Box::new(App::new()))),
-    )
+    eframe::run_native("MochiVM", options, Box::new(|_cc| Ok(Box::new(App::new()))))
 }
 
 struct App {
@@ -69,7 +65,7 @@ impl App {
             Ok(()) => {
                 self.status = "running".into();
                 self.log.clear();
-                self.log.push_str(">> qemu started\n");
+                self.log.push_str(">> vm started\n");
             }
             Err(e) => {
                 self.status = e.clone();
@@ -128,7 +124,7 @@ impl eframe::App for App {
                 ui.colored_label(egui::Color32::LIGHT_GREEN, &self.status);
                 ui.separator();
                 ui.label(format!(
-                    "qemu: {}",
+                    "engine: {}",
                     if self.backend.is_running() {
                         "running"
                     } else {

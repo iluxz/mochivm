@@ -18,9 +18,9 @@ pub enum Accel {
 impl Accel {
     pub fn label(self) -> &'static str {
         match self {
-            Accel::Tcg => "TCG (software, everywhere)",
-            Accel::Kvm => "KVM (linux, needs /dev/kvm)",
-            Accel::Whpx => "WHPX (windows, needs hyper-v)",
+            Accel::Tcg => "Software emulation",
+            Accel::Kvm => "Hardware (KVM, linux)",
+            Accel::Whpx => "Hardware (WHPX, windows)",
         }
     }
 }
@@ -114,9 +114,11 @@ impl Backend {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("failed to start qemu ({e}) - is qemu-system-x86_64 on PATH?"))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            format!(
+                "failed to start the vm engine ({e}) - put the engine in the engine/ folder or set MOCHIVM_QEMU"
+            )
+        })?;
 
         let (tx, rx) = channel();
         let stdout = child.stdout.take().ok_or("no stdout")?;
@@ -183,6 +185,18 @@ fn qemu_bin() -> PathBuf {
     if let Ok(p) = std::env::var("MOCHIVM_QEMU") {
         if !p.is_empty() {
             return PathBuf::from(p);
+        }
+    }
+    // bundled engine next to the app (MochiVM portable layout)
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+    {
+        for name in ["mochivm-vm.exe", "qemu-system-x86_64.exe"] {
+            let cand = exe_dir.join("engine").join(name);
+            if cand.exists() {
+                return cand;
+            }
         }
     }
     if cfg!(windows) {
