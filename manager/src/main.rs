@@ -111,6 +111,15 @@ fn run_self_test() -> Result<(), String> {
         say("== SELF-TEST PASSED ==");
     } else {
         say("== SELF-TEST FAILED: 'mochivm booted' never appeared on serial ==");
+        if !log.is_empty() {
+            say("-- raw engine output (tail) --");
+            let tail: Vec<&str> = log.lines().rev().take(20).collect();
+            for line in tail.into_iter().rev() {
+                say(&format!("    {line}"));
+            }
+        } else {
+            say("    (no output captured from engine)");
+        }
     }
     write_report(&dir, &report);
     if passed {
